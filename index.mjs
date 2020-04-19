@@ -8,6 +8,41 @@ const blocks = {};
 const blocksWithChildren = {};
 const pages = {};
 
+if (
+  !process.argv[2] ||
+  !process.argv[3] ||
+  process.argv[3] === "--h" ||
+  process.argv[3] === "--help"
+) {
+  console.log(`Roam export processor
+usage: node index.mjs export.filename.json [--action] [pagename]
+
+for example
+--duplicates to display a list of page names we think are duplicates
+--full to render a page with contents and linked references
+--mentions to render only the linked references of a page
+--text to render only the text of a page`);
+}
+
+if (process.argv[3] === "--duplicates") {
+  const titles = pagesRaw.map((x) => x.title).filter((x) => x.trim() !== "");
+  const mapping = {};
+  titles.forEach((title) => {
+    let simpleTitle = title.toLowerCase().replace(/[^A-Za-z0-9]/g, "");
+    if (!mapping[simpleTitle]) {
+      mapping[simpleTitle] = [];
+    }
+    mapping[simpleTitle].push(title);
+  });
+  console.log("Possible duplicates, simple algorithm: \n");
+  Object.keys(mapping).forEach((key) => {
+    if (mapping[key].length > 1) {
+      console.log(mapping[key].map((x) => `[[${x}]]`).join(" "));
+    }
+  });
+  process.exit(0);
+}
+
 const linkedReferences = {};
 
 // could probably be done much faster with a proper parser etc, but seems to work
@@ -123,12 +158,21 @@ pagesRaw.forEach((page) => {
 });
 
 const processText = (text) => {
-  return text.replace(/\(\((.+?)\)\)/g, (hit, uid) => {
-    if (blocks[uid]) {
-      return blocks[uid];
-    }
-    return hit;
-  });
+  return text
+    .replace(/\{\{embed: \(\((.+?)\)\)\}\}/g, (hit, uid) => {
+      if (blocksWithChildren[uid]) {
+        return blocksWithChildren[uid][2]
+          .split("\n")
+          .map((x) => x.substring(1))
+          .join("\n");
+      }
+    })
+    .replace(/\(\((.+?)\)\)/g, (hit, uid) => {
+      if (blocks[uid]) {
+        return blocks[uid];
+      }
+      return hit;
+    });
 };
 
 const trimString = (str, maxLength) => {
@@ -163,33 +207,24 @@ const renderLinkedReferences = (link) => {
     .join("");
 };
 
-if (pages[process.argv[3]]) {
-  console.log(`=== ${process.argv[3]} ===`);
-  console.log(processText(pages[process.argv[3]]));
+const action = process.argv[3];
+const pagename = process.argv[4];
+
+if (action === "--full") {
+  console.log(`=== ${process.argv[4]} ===`);
+  console.log(processText(pages[process.argv[4]]));
   console.log("\n\nBacklinks\n");
-  console.log(renderLinkedReferences(process.argv[3]));
+  console.log(renderLinkedReferences(process.argv[4]));
 }
 
-// const titles = contents.map(x => x.title).filter(x => x.trim() !== "");
-// const mapping = {};
-// titles.forEach(title => {
-//   let simpleTitle = title.toLowerCase().replace(/[^A-Za-z0-9]/g, "");
-//   if (!mapping[simpleTitle]) {
-//     mapping[simpleTitle] = [];
-//   }
-//   mapping[simpleTitle].push(title);
-// });
-// console.log("Possible duplicates, simple algorithm: \n");
-// Object.keys(mapping).forEach(key => {
-//   if (mapping[key].length > 1) {
-//     console.log(mapping[key].map(x => `[[${x}]]`).join(" "));
-//   }
-// });
+if (action === "--text") {
+  console.log(`=== ${process.argv[4]} ===`);
+  console.log(processText(pages[process.argv[4]]));
+}
 
-// console.log("\n\nFuzzy algorithm");
-
-// options.keepmap = true;
-// const dedupe = fuzz.dedupe(titles, options);
-// dedupe
-//   .filter(f => f[2].length > 1).
-//   .forEach(x => console.log(`${x[2].map(y => `[[${y[0]}]]`).join(" ")}`));
+if (action === "--mentions") {
+  console.log(`=== ${process.argv[4]} ===`);
+  console.log(processText(pages[process.argv[4]]));
+  console.log("\n\nBacklinks\n");
+  console.log(renderLinkedReferences(process.argv[4]));
+}
