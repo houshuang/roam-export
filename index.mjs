@@ -64,7 +64,12 @@ const extractLinks = (text, uid) => {
 const childrenRecursively = (children, indent, path, page) => {
   const output = children
     .map((child) => {
-      let text = `${"  ".repeat(indent * 2)}- ${child.title || child.string}\n`;
+      if (child.string.trim() === "") {
+        return "";
+      }
+      let text = `${"  ".repeat(indent * 2)}- ${(
+        child.title || child.string
+      ).trim()}\n`;
       blocks[child.uid] = child.string;
       const links = extractLinks(child.string, child.uid);
       if (links) {
@@ -87,8 +92,9 @@ const childrenRecursively = (children, indent, path, page) => {
         page,
         path,
         text
+          .trim()
           .split("\n")
-          .map((x) => x.substring(indent * 2))
+          // .map((x) => x)//.substring((indent - 1) * 2))
           .join("\n"),
       ];
       return text;
@@ -129,7 +135,7 @@ const trimString = (str, maxLength) => {
   if (str.length < maxLength) {
     return str;
   } else {
-    return str.substring(maxLength) + "...";
+    return str.substring(0, maxLength) + "...";
   }
 };
 
@@ -137,13 +143,19 @@ const renderLinkedReferences = (link) => {
   return linkedReferences[link]
     .map((f) => {
       const b = blocksWithChildren[f];
-      if (!b) {
-        console.log(f, blocksWithChildren[f]);
-      }
+      let indent = 2;
       if (b) {
-        return `# ${b[0]}\n${b[1].map((x) => trimString(x, 50)).join(" > ")}\n${
-          b[2]
-        }\n\n`;
+        let text = `# [[${b[0]}]]\n`;
+        if (b[1].length > 0) {
+          text += `  - ${b[1].map((x) => trimString(x, 50)).join(" > ")}\n`;
+          indent += 2;
+        }
+        text += `${b[2]
+          .trim()
+          .split("\n")
+          .map((x) => " ".repeat(indent) + x)
+          .join("\n")}\n`;
+        return text;
       } else {
         return "";
       }
