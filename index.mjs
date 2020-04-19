@@ -21,7 +21,11 @@ for example
 --duplicates to display a list of page names we think are duplicates
 --full to render a page with contents and linked references
 --mentions to render only the linked references of a page
---text to render only the text of a page`);
+--text to render only the text of a page
+--query to run a query, first list positive tags separated by comma, then optionally negative tags, so for example 
+  node index.mjs roam.json --query 'Peter Thiel,Roam' 'Note taking'
+  would return all blocks that mention Peter and Roam, but not Note taking.
+--tags shows you all the related tags (like the filter menu) sorted alphabetically, useful to run before running a query`);
 }
 
 if (process.argv[3] === "--duplicates") {
@@ -105,8 +109,8 @@ const childrenRecursively = (children, indent, path, page) => {
       let text = `${"  ".repeat(indent * 2)}- ${(
         child.title || child.string
       ).trim()}\n`;
-      blocks[child.uid] = child.string;
       const links = extractLinks(child.string, child.uid);
+      blocks[child.uid] = [child.string, links];
       if (links) {
         links.forEach((link) => {
           if (!linkedReferences[link]) {
@@ -126,11 +130,7 @@ const childrenRecursively = (children, indent, path, page) => {
       blocksWithChildren[child.uid] = [
         page,
         path,
-        text
-          .trim()
-          .split("\n")
-          // .map((x) => x)//.substring((indent - 1) * 2))
-          .join("\n"),
+        text.trim().split("\n").join("\n"),
       ];
       return text;
     })
@@ -169,7 +169,7 @@ const processText = (text) => {
     })
     .replace(/\(\((.+?)\)\)/g, (hit, uid) => {
       if (blocks[uid]) {
-        return blocks[uid];
+        return blocks[uid][0];
       }
       return hit;
     });
@@ -183,8 +183,8 @@ const trimString = (str, maxLength) => {
   }
 };
 
-const renderLinkedReferences = (link) => {
-  return linkedReferences[link]
+const renderLinkedReferences = (refs) => {
+  return refs
     .map((f) => {
       const b = blocksWithChildren[f];
       let indent = 2;
@@ -226,5 +226,35 @@ if (action === "--mentions") {
   console.log(`=== ${process.argv[4]} ===`);
   console.log(processText(pages[process.argv[4]]));
   console.log("\n\nBacklinks\n");
-  console.log(renderLinkedReferences(process.argv[4]));
+  console.log(renderLinkedReferences(linkedReferences[process.argv[4]]));
+}
+
+if (action == "--query") {
+  let queryPos = process.argv[4];
+  if (queryPos) {
+    queryPos = queryPos.split(",").map((x) => x.trim());
+  }
+  let queryNeg = process.argv[5];
+
+  if (queryNeg) {
+    queryNeg = queryNeg.split(",").map((x) => x.trim());
+  }
+  const firstMatches = linkedReferences[queryPos[0]];
+  const queryMatches = firstMatches.filter((x) => {
+    if (queryPos.some((tag) => !blocks[x][1].includes(tag))) {
+      return false;
+    }
+    if (queryNeg && queryNeg.some((tag) => blocks[x][1].includes(tag))) {
+      return false;
+    }
+    return true;
+  });
+  console.log(renderLinkedReferences(queryMatches));
+}
+
+if (action == "--tags") {
+  const ref = linkedReferences[process.argv[4]];
+  let tags = [];
+  ref.forEach((x) => tags = tags.concat(blocks[x][1]));
+  console.log([...new Set(tags)].sort())
 }
