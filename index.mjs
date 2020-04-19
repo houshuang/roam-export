@@ -61,7 +61,7 @@ const extractLinks = (text, uid) => {
   return links;
 };
 
-const childrenRecursively = (children, indent) => {
+const childrenRecursively = (children, indent, path, page) => {
   const output = children
     .map((child) => {
       let text = `${"  ".repeat(indent * 2)}- ${child.title || child.string}\n`;
@@ -76,9 +76,21 @@ const childrenRecursively = (children, indent) => {
         });
       }
       if (child.children) {
-        text += childrenRecursively(child.children, indent + 1);
-        blocksWithChildren[child.uid] = text;
+        text += childrenRecursively(
+          child.children,
+          indent + 1,
+          path.concat(child.string),
+          page
+        );
       }
+      blocksWithChildren[child.uid] = [
+        page,
+        path,
+        text
+          .split("\n")
+          .map((x) => x.substring(indent * 2))
+          .join("\n"),
+      ];
       return text;
     })
     .join("");
@@ -88,8 +100,8 @@ const childrenRecursively = (children, indent) => {
 
 pagesRaw.forEach((page) => {
   if (page.children) {
-    pages[page.title] = childrenRecursively(page.children, 0);
-    blocksWithChildren[page.uid] = pages[page.title];
+    pages[page.title] = childrenRecursively(page.children, 0, [], page.title);
+    blocksWithChildren[page.uid] = [page, [], pages[page.title]];
 
     const links = extractLinks(page.title);
     if (links) {
@@ -113,11 +125,34 @@ const processText = (text) => {
   });
 };
 
+const trimString = (str, maxLength) => {
+  if (str.length < maxLength) {
+    return str;
+  } else {
+    return str.substring(maxLength) + "...";
+  }
+};
+
 const renderLinkedReferences = (link) => {
-  return linkedReferences[link];
+  return linkedReferences[link]
+    .map((f) => {
+      const b = blocksWithChildren[f];
+      if (!b) {
+        console.log(f, blocksWithChildren[f]);
+      }
+      if (b) {
+        return `# ${b[0]}\n${b[1].map((x) => trimString(x, 50)).join(" > ")}\n${
+          b[2]
+        }\n\n`;
+      } else {
+        return "";
+      }
+    })
+    .join("");
 };
 
 if (pages[process.argv[3]]) {
+  console.log(`=== ${process.argv[3]} ===`);
   console.log(processText(pages[process.argv[3]]));
   console.log("\n\nBacklinks\n");
   console.log(renderLinkedReferences(process.argv[3]));
