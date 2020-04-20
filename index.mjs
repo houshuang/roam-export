@@ -1,14 +1,7 @@
 import fs from "fs";
-import fuzz from "fuzzball";
-
-const file = fs.readFileSync(process.argv[2], "utf-8");
-const pagesRaw = JSON.parse(file);
-
-const blocks = {};
-const blocksWithChildren = {};
-const pages = {};
 
 if (
+  !process.argv[1] ||
   !process.argv[2] ||
   !process.argv[3] ||
   process.argv[3] === "--h" ||
@@ -26,7 +19,15 @@ for example
   node index.mjs roam.json --query 'Peter Thiel,Roam' 'Note taking'
   would return all blocks that mention Peter and Roam, but not Note taking.
 --tags shows you all the related tags (like the filter menu) sorted alphabetically, useful to run before running a query`);
+  process.exit(0);
 }
+
+const file = fs.readFileSync(process.argv[2], "utf-8");
+const pagesRaw = JSON.parse(file);
+
+const blocks = {};
+const blocksWithChildren = {};
+const pages = {};
 
 if (process.argv[3] === "--duplicates") {
   const titles = pagesRaw.map((x) => x.title).filter((x) => x.trim() !== "");
@@ -158,6 +159,9 @@ pagesRaw.forEach((page) => {
 });
 
 const processText = (text) => {
+  if (!text) {
+    return "";
+  }
   return text
     .replace(/\{\{embed: \(\((.+?)\)\)\}\}/g, (hit, uid) => {
       if (blocksWithChildren[uid]) {
@@ -214,7 +218,7 @@ if (action === "--full") {
   console.log(`=== ${process.argv[4]} ===`);
   console.log(processText(pages[process.argv[4]]));
   console.log("\n\nBacklinks\n");
-  console.log(renderLinkedReferences(process.argv[4]));
+  console.log(renderLinkedReferences(linkedReferences[process.argv[4]]));
 }
 
 if (action === "--text") {
@@ -224,7 +228,6 @@ if (action === "--text") {
 
 if (action === "--mentions") {
   console.log(`=== ${process.argv[4]} ===`);
-  console.log(processText(pages[process.argv[4]]));
   console.log("\n\nBacklinks\n");
   console.log(renderLinkedReferences(linkedReferences[process.argv[4]]));
 }
@@ -255,6 +258,6 @@ if (action == "--query") {
 if (action == "--tags") {
   const ref = linkedReferences[process.argv[4]];
   let tags = [];
-  ref.forEach((x) => tags = tags.concat(blocks[x][1]));
-  console.log([...new Set(tags)].sort())
+  ref.forEach((x) => (tags = tags.concat(blocks[x][1])));
+  console.log([...new Set(tags)].sort());
 }
