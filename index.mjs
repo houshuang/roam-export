@@ -28,6 +28,7 @@ const pagesRaw = JSON.parse(file);
 const blocks = {};
 const blocksWithChildren = {};
 const pages = {};
+const urls = {};
 
 if (process.argv[3] === "--duplicates") {
   const titles = pagesRaw.map((x) => x.title).filter((x) => x.trim() !== "");
@@ -101,9 +102,23 @@ const extractLinks = (text, uid) => {
   return links;
 };
 
-const childrenRecursively = (children, indent, path, page) => {
+const urlRe = new RegExp("^https?:");
+
+const childrenRecursively = (children, indent, path, page, parentLink) => {
   const output = children
     .map((child) => {
+      if (urlRe.test(child.string)) {
+        if (parentLink && !urls[parentLink]) {
+          urls[parentLink] = [child.string.trim(), 1];
+        } else {
+          if (path.length === 0 && (!urls[page] || urls[page][1] > 0)) {
+            if (urls[page]) {
+            }
+            urls[page] = [child.string.trim(), 0];
+          }
+        }
+      }
+
       if (child.string.trim() === "") {
         return "";
       }
@@ -112,7 +127,15 @@ const childrenRecursively = (children, indent, path, page) => {
       ).trim()}\n`;
       const links = extractLinks(child.string, child.uid);
       blocks[child.uid] = [child.string, links];
+      let mdURL;
+      const findMD = child.string.match(/\[link\]\((.+?)\)/);
+      if (findMD) {
+        mdURL = findMD[1];
+      }
       if (links) {
+        if (mdURL) {
+          urls[links[0]] = [mdURL.trim(), 0];
+        }
         links.forEach((link) => {
           if (!linkedReferences[link]) {
             linkedReferences[link] = [];
@@ -125,7 +148,8 @@ const childrenRecursively = (children, indent, path, page) => {
           child.children,
           indent + 1,
           path.concat(child.string),
-          page
+          page,
+          links && links[0]
         );
       }
       blocksWithChildren[child.uid] = [
@@ -260,4 +284,106 @@ if (action == "--tags") {
   let tags = [];
   ref.forEach((x) => (tags = tags.concat(blocks[x][1])));
   console.log([...new Set(tags)].sort());
+}
+
+if (action === "--links") {
+  console.log("export default [");
+  Object.keys(linkedReferences).forEach((x) => console.log("`" + x + "`,"));
+  console.log("]");
+}
+
+if (action === "--blocks") {
+  console.log("export default {");
+  Object.keys(blocks).forEach((x) => {
+    console.log(`"` + x + '": `' + blocks[x][0].replace(/`/g, "'") + "`,");
+  });
+  console.log("}");
+}
+
+if (action === "--blockEmbeds") {
+  console.log("export default {");
+  Object.keys(blocksWithChildren).forEach((x) => {
+    console.log(
+      `"` + x + '": `' + blocksWithChildren[x][2].replace(/`/g, "'") + "`,"
+    );
+  });
+  console.log("}");
+}
+
+const replaceUrls = (text, markdown) => {
+  return text.replace(/\[\[(.+?)\]\]/g, (_, x) => {
+    if (urls[x]) {
+      if (markdown) {
+        return `[${x}](${urls[x][0]})`;
+      } else {
+        return `<a href="${urls[x][0]}>${x}</a>`;
+      }
+    } else {
+      return x;
+    }
+  });
+};
+
+const reformatText = (text) => {
+  const lines = text.split("\n");
+  const output = "";
+  const header = 0;
+  const newL = lines.map((x) => {
+    const dash = x.indexOf("-");
+    const indent = dash / 4;
+    const text = x.substr(dash + 1);
+    return [indent, text];
+  });
+  let bullet = undefined;
+  newL.forEach((f, i) => {
+    if (i > 0 && newL[i - 1][0] !== f[0]) {
+      bullet = undefined;
+    }
+    let header = "";
+    if (newL[i + 1] && newL[i + 1][0] > f[0]) {
+      header = "#".repeat(f[0] + 1) + " ";
+    }
+    if (header === "" && bullet === undefined) {
+      bullet = true;
+      let stop = false;
+      let c = i;
+      while (!stop) {
+        if (c > newL.length || c[0] !== f[0]) {
+          stop = true;
+        }
+        if (newL[c][1].length > 110) {
+          bullet = false;
+        }
+      }
+    }
+    console.log(`${bullet || false ? "- " : ""}${header}${f[1].trim()}\n`);
+  });
+};
+
+if (action === "--export") {
+  const text = reformatText(
+    replaceUrls(processText(pages[process.argv[4]]), true)
+  );
+  console.log(text);
+}
+
+if (action === "--exportHTML") {
+  const text = replaceUrls(processText(pages[process.argv[4]]));
+  console.log(text);
+}
+
+if (action === "--urls") {
+  Object.keys(urls).forEach((x) => {
+    console.log(`${x}\t${urls[x][0]}`);
+  });
+}
+
+if (action === "--urlsJS") {
+  console.log("export default {");
+  Object.keys(urls).forEach((u) =>
+    console.log(
+      `"${u.replace(/"/g, "")}": "${urls[u][0].replace(/"/g, "%20")}",`
+    )
+  );
+  console.log("}");
 }
