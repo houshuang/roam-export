@@ -18,7 +18,11 @@ for example
 --query to run a query, first list positive tags separated by comma, then optionally negative tags, so for example 
   node index.mjs roam.json --query 'Peter Thiel,Roam' 'Note taking'
   would return all blocks that mention Peter and Roam, but not Note taking.
---tags shows you all the related tags (like the filter menu) sorted alphabetically, useful to run before running a query`);
+--tags shows you all the related tags (like the filter menu) sorted alphabetically, useful to run before running a query
+--export exports a page as Markdown, converting URLs and bullets
+--exportHTML exports a pag , converting URLs
+--urls lists page names and their related URLs
+--urlsJS lists page names and their related URLs as JS output`);
   process.exit(0);
 }
 
