@@ -19,10 +19,12 @@ for example
   node index.mjs roam.json --query 'Peter Thiel,Roam' 'Note taking'
   would return all blocks that mention Peter and Roam, but not Note taking.
 --tags shows you all the related tags (like the filter menu) sorted alphabetically, useful to run before running a query
+--replaceUrls replaces all links with external URLs, and removes links that have no external URLs
 --export exports a page as Markdown, converting URLs and bullets
 --exportHTML exports a pag , converting URLs
 --urls lists page names and their related URLs
---urlsJS lists page names and their related URLs as JS output`);
+--urlsJS lists page names and their related URLs as JS output
+--wordCount shows word count and longest block`);
   process.exit(0);
 }
 
@@ -35,9 +37,9 @@ const pages = {};
 const urls = {};
 
 if (process.argv[3] === "--duplicates") {
-  const titles = pagesRaw.map((x) => x.title).filter((x) => x.trim() !== "");
+  const titles = pagesRaw.map(x => x.title).filter(x => x.trim() !== "");
   const mapping = {};
-  titles.forEach((title) => {
+  titles.forEach(title => {
     let simpleTitle = title.toLowerCase().replace(/[^A-Za-z0-9]/g, "");
     if (!mapping[simpleTitle]) {
       mapping[simpleTitle] = [];
@@ -45,9 +47,9 @@ if (process.argv[3] === "--duplicates") {
     mapping[simpleTitle].push(title);
   });
   console.log("Possible duplicates, simple algorithm: \n");
-  Object.keys(mapping).forEach((key) => {
+  Object.keys(mapping).forEach(key => {
     if (mapping[key].length > 1) {
-      console.log(mapping[key].map((x) => `[[${x}]]`).join(" "));
+      console.log(mapping[key].map(x => `[[${x}]]`).join(" "));
     }
   });
   process.exit(0);
@@ -56,12 +58,12 @@ if (process.argv[3] === "--duplicates") {
 const linkedReferences = {};
 
 // could probably be done much faster with a proper parser etc, but seems to work
-const getNestedLinks = (text) => {
+const getNestedLinks = text => {
   let links = [];
   let state = "normal"; // 'seenOne'
   let counter = 0;
   let currentLinks = [];
-  text.split("").forEach((char) => {
+  text.split("").forEach(char => {
     currentLinks.forEach((x, i) => (currentLinks[i] += char));
     if (state === "seenOne" && char !== "[") {
       state = "normal";
@@ -110,7 +112,7 @@ const urlRe = new RegExp("^https?:");
 
 const childrenRecursively = (children, indent, path, page, parentLink) => {
   const output = children
-    .map((child) => {
+    .map(child => {
       if (urlRe.test(child.string)) {
         if (parentLink && !urls[parentLink]) {
           urls[parentLink] = [child.string.trim(), 1];
@@ -140,7 +142,7 @@ const childrenRecursively = (children, indent, path, page, parentLink) => {
         if (mdURL) {
           urls[links[0]] = [mdURL.trim(), 0];
         }
-        links.forEach((link) => {
+        links.forEach(link => {
           if (!linkedReferences[link]) {
             linkedReferences[link] = [];
           }
@@ -159,7 +161,10 @@ const childrenRecursively = (children, indent, path, page, parentLink) => {
       blocksWithChildren[child.uid] = [
         page,
         path,
-        text.trim().split("\n").join("\n"),
+        text
+          .trim()
+          .split("\n")
+          .join("\n")
       ];
       return text;
     })
@@ -168,14 +173,14 @@ const childrenRecursively = (children, indent, path, page, parentLink) => {
   return output;
 };
 
-pagesRaw.forEach((page) => {
+pagesRaw.forEach(page => {
   if (page.children) {
     pages[page.title] = childrenRecursively(page.children, 0, [], page.title);
     blocksWithChildren[page.uid] = [page, [], pages[page.title]];
 
     const links = extractLinks(page.title);
     if (links) {
-      links.forEach((link) => {
+      links.forEach(link => {
         if (!linkedReferences[link]) {
           linkedReferences[link] = [];
         }
@@ -186,7 +191,7 @@ pagesRaw.forEach((page) => {
   }
 });
 
-const processText = (text) => {
+const processText = text => {
   if (!text) {
     return "";
   }
@@ -195,7 +200,7 @@ const processText = (text) => {
       if (blocksWithChildren[uid]) {
         return blocksWithChildren[uid][2]
           .split("\n")
-          .map((x) => x.substring(1))
+          .map(x => x.substring(1))
           .join("\n");
       }
     })
@@ -215,21 +220,21 @@ const trimString = (str, maxLength) => {
   }
 };
 
-const renderLinkedReferences = (refs) => {
+const renderLinkedReferences = refs => {
   return refs
-    .map((f) => {
+    .map(f => {
       const b = blocksWithChildren[f];
       let indent = 2;
       if (b) {
         let text = `# [[${b[0]}]]\n`;
         if (b[1].length > 0) {
-          text += `  - ${b[1].map((x) => trimString(x, 50)).join(" > ")}\n`;
+          text += `  - ${b[1].map(x => trimString(x, 50)).join(" > ")}\n`;
           indent += 2;
         }
         text += `${b[2]
           .trim()
           .split("\n")
-          .map((x) => " ".repeat(indent) + x)
+          .map(x => " ".repeat(indent) + x)
           .join("\n")}\n`;
         return text;
       } else {
@@ -263,19 +268,19 @@ if (action === "--mentions") {
 if (action == "--query") {
   let queryPos = process.argv[4];
   if (queryPos) {
-    queryPos = queryPos.split(",").map((x) => x.trim());
+    queryPos = queryPos.split(",").map(x => x.trim());
   }
   let queryNeg = process.argv[5];
 
   if (queryNeg) {
-    queryNeg = queryNeg.split(",").map((x) => x.trim());
+    queryNeg = queryNeg.split(",").map(x => x.trim());
   }
   const firstMatches = linkedReferences[queryPos[0]];
-  const queryMatches = firstMatches.filter((x) => {
-    if (queryPos.some((tag) => !blocks[x][1].includes(tag))) {
+  const queryMatches = firstMatches.filter(x => {
+    if (queryPos.some(tag => !blocks[x][1].includes(tag))) {
       return false;
     }
-    if (queryNeg && queryNeg.some((tag) => blocks[x][1].includes(tag))) {
+    if (queryNeg && queryNeg.some(tag => blocks[x][1].includes(tag))) {
       return false;
     }
     return true;
@@ -286,19 +291,19 @@ if (action == "--query") {
 if (action == "--tags") {
   const ref = linkedReferences[process.argv[4]];
   let tags = [];
-  ref.forEach((x) => (tags = tags.concat(blocks[x][1])));
+  ref.forEach(x => (tags = tags.concat(blocks[x][1])));
   console.log([...new Set(tags)].sort());
 }
 
 if (action === "--links") {
   console.log("export default [");
-  Object.keys(linkedReferences).forEach((x) => console.log("`" + x + "`,"));
+  Object.keys(linkedReferences).forEach(x => console.log("`" + x + "`,"));
   console.log("]");
 }
 
 if (action === "--blocks") {
   console.log("export default {");
-  Object.keys(blocks).forEach((x) => {
+  Object.keys(blocks).forEach(x => {
     console.log(`"` + x + '": `' + blocks[x][0].replace(/`/g, "'") + "`,");
   });
   console.log("}");
@@ -306,7 +311,7 @@ if (action === "--blocks") {
 
 if (action === "--blockEmbeds") {
   console.log("export default {");
-  Object.keys(blocksWithChildren).forEach((x) => {
+  Object.keys(blocksWithChildren).forEach(x => {
     console.log(
       `"` + x + '": `' + blocksWithChildren[x][2].replace(/`/g, "'") + "`,"
     );
@@ -328,11 +333,11 @@ const replaceUrls = (text, markdown) => {
   });
 };
 
-const reformatText = (text) => {
+const reformatText = text => {
   const lines = text.split("\n");
   const output = "";
   const header = 0;
-  const newL = lines.map((x) => {
+  const newL = lines.map(x => {
     const dash = x.indexOf("-");
     const indent = dash / 4;
     const text = x.substr(dash + 1);
@@ -368,7 +373,6 @@ if (action === "--export") {
   const text = reformatText(
     replaceUrls(processText(pages[process.argv[4]]), true)
   );
-  console.log(text);
 }
 
 if (action === "--exportHTML") {
@@ -376,18 +380,51 @@ if (action === "--exportHTML") {
   console.log(text);
 }
 
+if (action === "--replaceURLs") {
+  const text = replaceUrls(processText(pages[process.argv[4]]), true);
+  console.log(text);
+}
+
 if (action === "--urls") {
-  Object.keys(urls).forEach((x) => {
+  Object.keys(urls).forEach(x => {
     console.log(`${x}\t${urls[x][0]}`);
   });
 }
 
 if (action === "--urlsJS") {
   console.log("export default {");
-  Object.keys(urls).forEach((u) =>
+  Object.keys(urls).forEach(u =>
     console.log(
       `"${u.replace(/"/g, "")}": "${urls[u][0].replace(/"/g, "%20")}",`
     )
   );
   console.log("}");
+}
+
+if (action === "--wordCount") {
+  let w = 0;
+  let wMax = 0;
+  let wMaxId = undefined;
+  let lMax = 0;
+  let lMaxId = undefined;
+  Object.keys(blocks).forEach(b => {
+    const wCur = blocks[b][0].match(/\S+/g).length;
+    w += wCur;
+    const lCur = blocks[b][1].length;
+    if (lCur > lMax) {
+      lMax = lCur;
+      lMaxId = b;
+    }
+    if (wCur > wMax) {
+      wMax = wCur;
+      wMaxId = b;
+    }
+  });
+  console.log(
+    `You have ${Object.keys(blocks).length} blocks, and ${
+      Object.keys(pages).length
+    } pages. In total, ${w} words.`
+  );
+  console.log(`Longest block: ${blocks[wMaxId]}`);
+  console.log(`Block with the most links: ${blocks[lMaxId]}`);
 }
