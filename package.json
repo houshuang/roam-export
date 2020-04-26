@@ -11,5 +11,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "chrono-node": "^1.4.6"
   }
 }

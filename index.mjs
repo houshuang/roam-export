@@ -1,4 +1,8 @@
+import util from "util";
 import fs from "fs";
+import chrono from "chrono-node";
+
+util.inspect.defaultOptions.depth = null;
 
 if (
   !process.argv[1] ||
@@ -56,6 +60,7 @@ if (process.argv[3] === "--duplicates") {
 }
 
 const linkedReferences = {};
+const parentLinkedReferences = {};
 
 // could probably be done much faster with a proper parser etc, but seems to work
 const getNestedLinks = text => {
@@ -100,6 +105,54 @@ const getNestedLinks = text => {
   return links;
 };
 
+const parseQuery = text => {
+  text = text.trim();
+  if (text[0] === "{") {
+    text = text.slice(1, -1);
+  }
+  let [word, ...rest] = text.split(":");
+  rest = rest.join(":").trim();
+  let components = [];
+  let index = 0;
+  let c = 0;
+  let mode = "normal"; // 'embedded'
+  let res = "";
+  rest.split("").forEach((char, i) => {
+    if (char === "{") {
+      if (mode === "normal") {
+        mode = "embedded";
+        if (res.trim().length > 0) {
+          components = components.concat(getNestedLinks(res));
+          index = components.length - 1;
+          res = "";
+          index += 1;
+        }
+      }
+      res += char;
+      c += 1;
+    } else if (char === "}") {
+      if (mode === "normal") {
+        console.error(`Didn't expect to see } here`, i);
+      } else {
+        res += char;
+        c -= 1;
+        if (c === 0) {
+          components[index] = parseQuery(res);
+          index += 1;
+          mode = "normal";
+          res = "";
+        }
+      }
+    } else {
+      res += char;
+    }
+  });
+  if (res.length > 0) {
+    components = components.concat(getNestedLinks(res));
+  }
+  return { [word]: components };
+};
+
 const extractLinks = (text, uid) => {
   let links = [];
   const newText = text.replace("#[[", "[[");
@@ -110,7 +163,15 @@ const extractLinks = (text, uid) => {
 
 const urlRe = new RegExp("^https?:");
 
-const childrenRecursively = (children, indent, path, page, parentLink) => {
+const childrenRecursively = (
+  children,
+  indent,
+  path,
+  page,
+  parentLink,
+  parentLinks,
+  pathUids
+) => {
   const output = children
     .map(child => {
       if (urlRe.test(child.string)) {
@@ -132,7 +193,14 @@ const childrenRecursively = (children, indent, path, page, parentLink) => {
         child.title || child.string
       ).trim()}\n`;
       const links = extractLinks(child.string, child.uid);
-      blocks[child.uid] = [child.string, links];
+      blocks[child.uid] = [
+        child.string,
+        links,
+        parentLinks,
+        pathUids,
+        child["edit-time"],
+        child["create-time"]
+      ];
       let mdURL;
       const findMD = child.string.match(/\[link\]\((.+?)\)/);
       if (findMD) {
@@ -148,6 +216,12 @@ const childrenRecursively = (children, indent, path, page, parentLink) => {
           }
           linkedReferences[link].push(child.uid);
         });
+        links.concat(parentLinks).forEach(link => {
+          if (!parentLinkedReferences[link]) {
+            parentLinkedReferences[link] = [];
+          }
+          parentLinkedReferences[link].push(child.uid);
+        });
       }
       if (child.children) {
         text += childrenRecursively(
@@ -155,7 +229,9 @@ const childrenRecursively = (children, indent, path, page, parentLink) => {
           indent + 1,
           path.concat(child.string),
           page,
-          links && links[0]
+          links && links[0],
+          links.concat(parentLinks),
+          pathUids.concat(child.uid)
         );
       }
       blocksWithChildren[child.uid] = [
@@ -175,7 +251,15 @@ const childrenRecursively = (children, indent, path, page, parentLink) => {
 
 pagesRaw.forEach(page => {
   if (page.children) {
-    pages[page.title] = childrenRecursively(page.children, 0, [], page.title);
+    pages[page.title] = childrenRecursively(
+      page.children,
+      0,
+      [],
+      page.title,
+      undefined,
+      [],
+      [page.title]
+    );
     blocksWithChildren[page.uid] = [page, [], pages[page.title]];
 
     const links = extractLinks(page.title);
@@ -427,4 +511,104 @@ if (action === "--wordCount") {
   );
   console.log(`Longest block: ${blocks[wMaxId]}`);
   console.log(`Block with the most links: ${blocks[lMaxId]}`);
+}
+
+if (action === "--parseQuery") {
+  console.log(parseQuery(process.argv[4]));
+}
+
+const roamRe = RegExp(/.+\d\d?.+, \d\d\d\d/);
+
+const isRoamDate = string => roamRe.test(string);
+
+const RoamDates = {};
+
+const convertRoamDate = string => {
+  if (RoamDates[string]) {
+    return RoamDates[string];
+  }
+  const res = chrono.parseDate(string).getTime();
+  RoamDates[string] = res;
+  return res;
+};
+
+const evaluators = {
+  and: (block, pieces) =>
+    pieces.every(piece => {
+      if (typeof piece === "string") {
+        const res = block[2].concat(block[3]).includes(piece);
+        if (res) {
+          // console.log(block, piece, res);
+        }
+        return res;
+      } else {
+        const res = evaluators[Object.keys(piece)[0]](
+          block,
+          Object.values(piece)[0]
+        );
+        return res;
+      }
+    }),
+  not: (block, pieces) =>
+    pieces.every(piece => !block[2].concat(block[3]).includes(piece)),
+  or: (block, pieces) =>
+    pieces.some(piece => block[2].concat(block[3]).includes(piece)),
+  between: (block, pieces) => {
+    pieces = pieces.map(x => convertRoamDate(x));
+    const matchingDates = block[2].concat(block[3]).filter(x => isRoamDate(x));
+    return matchingDates.some(x => {
+      const d = convertRoamDate(x);
+      if (d >= pieces[0] && d <= pieces[1]) {
+        return true;
+      } else {
+        return false;
+      }
+    });
+  },
+  substring: (block, pieces) => block[1].includes(pieces[0]),
+  has: (block, pieces) =>
+    block[1].includes(pieces[0] === "highlight" ? "^^" : "**"),
+  betweenCreate: (block, pieces) => {
+    pieces = pieces.map(x => convertRoamDate(x));
+    const matchingDates = block[2].concat(block[3]).filter(x => isRoamDate(x));
+    const d = block[6];
+    if (d >= pieces[0] && d <= pieces[1]) {
+      return true;
+    } else {
+      return false;
+    }
+  },
+  betweenUpdate: (block, pieces) => {
+    pieces = pieces.map(x => convertRoamDate(x));
+    const matchingDates = block[2].concat(block[3]).filter(x => isRoamDate(x));
+    const d = block[5];
+    console.log(pieces, d);
+    if (d >= pieces[0] && d <= pieces[1]) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+};
+
+const filterBlocks = blocks => {
+  blocks.sort((x, y) => x[4].length - y[4].length);
+  const seen = {};
+  return blocks.filter(b => {
+    if (b[4].some(x => seen[x])) {
+      return false;
+    }
+    seen[b[0]] = true;
+    return true;
+  });
+};
+
+if (action === "--runQuery") {
+  const blocksToProcess = Object.keys(blocks).map(x => [x, ...blocks[x]]);
+  const query = parseQuery(process.argv[4]);
+  const results = Object.values(blocksToProcess).filter(block =>
+    evaluators[Object.keys(query)[0]](block, Object.values(query)[0])
+  );
+  const finalBlocks = filterBlocks(results);
+  console.log(renderLinkedReferences(finalBlocks.map(x => x[0])));
 }
