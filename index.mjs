@@ -260,11 +260,19 @@ pagesRaw.forEach(page => {
       [],
       [page.title]
     );
-    blocksWithChildren[page.uid] = [page, [], pages[page.title]];
+    const pageLinks = extractLinks(page.title);
+    blocksWithChildren[page.title] = [page.title, pageLinks, pages[page.title]];
+    blocks[page.title] = [
+      page.title,
+      pageLinks,
+      [],
+      [],
+      page["edit-time"],
+      page["create-time"]
+    ];
 
-    const links = extractLinks(page.title);
-    if (links) {
-      links.forEach(link => {
+    if (pageLinks) {
+      pageLinks.forEach(link => {
         if (!linkedReferences[link]) {
           linkedReferences[link] = [];
         }
@@ -272,6 +280,12 @@ pagesRaw.forEach(page => {
         linkedReferences[link].push(page.uid);
       });
     }
+  }
+});
+
+Object.keys(linkedReferences).forEach(x => {
+  if (!blocks[x]) {
+    blocks[x] = [x, extractLinks(x), [], [], null, null];
   }
 });
 
@@ -315,7 +329,7 @@ const renderLinkedReferences = refs => {
           text += `  - ${b[1].map(x => trimString(x, 50)).join(" > ")}\n`;
           indent += 2;
         }
-        text += `${b[2]
+        text += `${processText(b[2])
           .trim()
           .split("\n")
           .map(x => " ".repeat(indent) + x)
@@ -566,6 +580,7 @@ const evaluators = {
     });
   },
   substring: (block, pieces) => block[1].includes(pieces[0]),
+  startsWith: (block, pieces) => block[1].startsWith(pieces[0]),
   has: (block, pieces) =>
     block[1].includes(pieces[0] === "highlight" ? "^^" : "**"),
   betweenCreate: (block, pieces) => {
@@ -611,4 +626,14 @@ if (action === "--runQuery") {
   );
   const finalBlocks = filterBlocks(results);
   console.log(renderLinkedReferences(finalBlocks.map(x => x[0])));
+}
+
+if (action === "--runQueryBlocksOnly") {
+  const blocksToProcess = Object.keys(blocks).map(x => [x, ...blocks[x]]);
+  const query = parseQuery(process.argv[4]);
+  const results = Object.values(blocksToProcess).filter(block =>
+    evaluators[Object.keys(query)[0]](block, Object.values(query)[0])
+  );
+  const finalBlocks = filterBlocks(results);
+  finalBlocks.forEach(x => console.log(x[1]));
 }
