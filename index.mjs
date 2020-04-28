@@ -270,7 +270,6 @@ pagesRaw.forEach(page => {
       page["edit-time"],
       page["create-time"]
     ];
-
     if (pageLinks) {
       pageLinks.forEach(link => {
         if (!linkedReferences[link]) {
@@ -319,6 +318,9 @@ const trimString = (str, maxLength) => {
 };
 
 const renderLinkedReferences = refs => {
+  const b = filterBlocks(refs.filter(f => f).map(x => [x, ...blocks[x]])).map(
+    x => x[0]
+  );
   return refs
     .map(f => {
       const b = blocksWithChildren[f];
@@ -417,23 +419,34 @@ if (action === "--blockEmbeds") {
   console.log("}");
 }
 
-const replaceUrls = (text, markdown) => {
-  return text.replace(/\[\[(.+?)\]\]/g, (_, x) => {
-    if (urls[x]) {
-      if (markdown) {
-        return `[${x}](${urls[x][0]})`;
-      } else {
-        return `<a href="${urls[x][0]}>${x}</a>`;
-      }
-    } else {
-      return x;
+const replaceUrls = (text, markdown, acceptedUrls) => {
+  text = text.replace(/[\<\>]/g,'')
+  const ls = extractLinks(text);
+  ls.sort((x, y) => x.length - y.length);
+  ls.forEach(x => {
+    let res = null;
+    // if (urls[x]) {
+    //   if (markdown) {
+    //     res = `[${x}](${urls[x][0]})`;
+    //   } else {
+    //     res = `<a href="${urls[x][0]}>${x}</a>`;
+    //   }
+    // } else {
+    if (acceptedUrls && !acceptedUrls.includes(x)) {
+      res = `**${x}**`;
+    }
+    // }
+    if (res) {
+      console.log(x, res);
+      text = text.replace(`[[${x}]]`, res);
     }
   });
+  return text;
 };
 
 const reformatText = text => {
+  let output = "";
   const lines = text.split("\n");
-  const output = "";
   const header = 0;
   const newL = lines.map(x => {
     const dash = x.indexOf("-");
@@ -463,13 +476,14 @@ const reformatText = text => {
         }
       }
     }
-    console.log(`${bullet || false ? "- " : ""}${header}${f[1].trim()}\n`);
+    output += `${bullet || false ? "- " : ""}${header}${f[1].trim()}\n`;
   });
+  return output;
 };
 
 if (action === "--export") {
-  const text = reformatText(
-    replaceUrls(processText(pages[process.argv[4]]), true)
+  console.log(
+    reformatText(replaceUrls(processText(pages[process.argv[4]]), true))
   );
 }
 
@@ -564,9 +578,31 @@ const evaluators = {
       }
     }),
   not: (block, pieces) =>
-    pieces.every(piece => !block[2].concat(block[3]).includes(piece)),
+    !pieces.some(piece => {
+      if (typeof piece === "string") {
+        const res = block[2].concat(block[3]).includes(piece);
+        return res;
+      } else {
+        const res = evaluators[Object.keys(piece)[0]](
+          block,
+          Object.values(piece)[0]
+        );
+        return res;
+      }
+    }),
   or: (block, pieces) =>
-    pieces.some(piece => block[2].concat(block[3]).includes(piece)),
+    pieces.some(piece => {
+      if (typeof piece === "string") {
+        const res = block[2].concat(block[3]).includes(piece);
+        return res;
+      } else {
+        const res = evaluators[Object.keys(piece)[0]](
+          block,
+          Object.values(piece)[0]
+        );
+        return res;
+      }
+    }),
   between: (block, pieces) => {
     pieces = pieces.map(x => convertRoamDate(x));
     const matchingDates = block[2].concat(block[3]).filter(x => isRoamDate(x));
@@ -626,6 +662,39 @@ if (action === "--runQuery") {
   );
   const finalBlocks = filterBlocks(results);
   console.log(renderLinkedReferences(finalBlocks.map(x => x[0])));
+}
+
+if (action === "--runQueryExport") {
+  let blocksToProcess = Object.keys(pages).map(x => [null, x, [x], []]);
+  const queryStr = process.argv[4];
+  if (queryStr) {
+    const query = parseQuery(queryStr);
+    blocksToProcess = blocksToProcess.filter(block =>
+      evaluators[Object.keys(query)[0]](block, Object.values(query)[0])
+    );
+  }
+  const allLinks = blocksToProcess.map(x => x[1]);
+  blocksToProcess.forEach(block => {
+    console.log(block);
+    const fname = block[1].replace(/[ :\/\(\)]/g, "-");
+    let text = `---
+title: "${block[1]}"
+---
+
+`;
+    text += replaceUrls(processText(pages[fname] || ""), false, allLinks);
+
+    text += "\n\nBacklinks\n";
+    text += linkedReferences[fname]
+      ? replaceUrls(
+          renderLinkedReferences(linkedReferences[fname]),
+          false,
+          allLinks
+        )
+      : "";
+
+    fs.writeFileSync(`export/${fname}.md`, text);
+  });
 }
 
 if (action === "--runQueryBlocksOnly") {
