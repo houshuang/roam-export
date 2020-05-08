@@ -39,11 +39,12 @@ const blocks = {};
 const blocksWithChildren = {};
 const pages = {};
 const urls = {};
+let gatsbyLinks = [];
 
 if (process.argv[3] === "--duplicates") {
-  const titles = pagesRaw.map(x => x.title).filter(x => x.trim() !== "");
+  const titles = pagesRaw.map((x) => x.title).filter((x) => x.trim() !== "");
   const mapping = {};
-  titles.forEach(title => {
+  titles.forEach((title) => {
     let simpleTitle = title.toLowerCase().replace(/[^A-Za-z0-9]/g, "");
     if (!mapping[simpleTitle]) {
       mapping[simpleTitle] = [];
@@ -51,9 +52,9 @@ if (process.argv[3] === "--duplicates") {
     mapping[simpleTitle].push(title);
   });
   console.log("Possible duplicates, simple algorithm: \n");
-  Object.keys(mapping).forEach(key => {
+  Object.keys(mapping).forEach((key) => {
     if (mapping[key].length > 1) {
-      console.log(mapping[key].map(x => `[[${x}]]`).join(" "));
+      console.log(mapping[key].map((x) => `[[${x}]]`).join(" "));
     }
   });
   process.exit(0);
@@ -62,11 +63,11 @@ if (process.argv[3] === "--duplicates") {
 const linkedReferences = {};
 const parentLinkedReferences = {};
 
-const filterBlocks = blocks => {
+const filterBlocks = (blocks) => {
   blocks.sort((x, y) => x[4].length - y[4].length);
   const seen = {};
-  return blocks.filter(b => {
-    if (b[4].some(x => seen[x])) {
+  return blocks.filter((b) => {
+    if (b[4].some((x) => seen[x])) {
       return false;
     }
     seen[b[0]] = true;
@@ -75,12 +76,12 @@ const filterBlocks = blocks => {
 };
 
 // could probably be done much faster with a proper parser etc, but seems to work
-const getNestedLinks = text => {
+const getNestedLinks = (text) => {
   let links = [];
   let state = "normal"; // 'seenOne'
   let counter = 0;
   let currentLinks = [];
-  text.split("").forEach(char => {
+  text.split("").forEach((char) => {
     currentLinks.forEach((x, i) => (currentLinks[i] += char));
     if (state === "seenOne" && char !== "[") {
       state = "normal";
@@ -117,7 +118,7 @@ const getNestedLinks = text => {
   return links;
 };
 
-const parseQuery = text => {
+const parseQuery = (text) => {
   text = text.trim();
   if (text[0] === "{") {
     text = text.slice(1, -1);
@@ -185,7 +186,7 @@ const childrenRecursively = (
   pathUids
 ) => {
   const output = children
-    .map(child => {
+    .map((child) => {
       if (urlRe.test(child.string)) {
         if (parentLink && !urls[parentLink]) {
           urls[parentLink] = [child.string.trim(), 1];
@@ -205,7 +206,7 @@ const childrenRecursively = (
       let text = `${"  ".repeat(indent * 2)}- ${lines[0]}\n`;
       if (lines.length > 1) {
         text += "\n";
-        lines.slice(1).forEach(l => {
+        lines.slice(1).forEach((l) => {
           text += `${"  ".repeat(indent * 2)}  ${l}\n`;
         });
       }
@@ -217,7 +218,7 @@ const childrenRecursively = (
         parentLinks,
         pathUids,
         child["edit-time"],
-        child["create-time"]
+        child["create-time"],
       ];
       let mdURL;
       const findMD = child.string.match(/\[link\]\((.+?)\)/);
@@ -228,13 +229,13 @@ const childrenRecursively = (
         if (mdURL) {
           urls[links[0]] = [mdURL.trim(), 0];
         }
-        links.forEach(link => {
+        links.forEach((link) => {
           if (!linkedReferences[link]) {
             linkedReferences[link] = [];
           }
           linkedReferences[link].push(child.uid);
         });
-        links.concat(parentLinks).forEach(link => {
+        links.concat(parentLinks).forEach((link) => {
           if (!parentLinkedReferences[link]) {
             parentLinkedReferences[link] = [];
           }
@@ -255,10 +256,7 @@ const childrenRecursively = (
       blocksWithChildren[child.uid] = [
         page,
         path,
-        text
-          .trim()
-          .split("\n")
-          .join("\n")
+        text.trim().split("\n").join("\n"),
       ];
       return text;
     })
@@ -267,7 +265,7 @@ const childrenRecursively = (
   return output;
 };
 
-pagesRaw.forEach(page => {
+pagesRaw.forEach((page) => {
   if (page.children) {
     pages[page.title] = childrenRecursively(
       page.children,
@@ -286,10 +284,13 @@ pagesRaw.forEach(page => {
       [],
       [],
       page["edit-time"],
-      page["create-time"]
+      page["create-time"],
     ];
+    if (page.title === "about") {
+      gatsbyLinks = extractLinks(pages[page.title]).concat(["about"]);
+    }
     if (pageLinks) {
-      pageLinks.forEach(link => {
+      pageLinks.forEach((link) => {
         if (!linkedReferences[link]) {
           linkedReferences[link] = [];
         }
@@ -300,13 +301,13 @@ pagesRaw.forEach(page => {
   }
 });
 
-Object.keys(linkedReferences).forEach(x => {
+Object.keys(linkedReferences).forEach((x) => {
   if (!blocks[x]) {
     blocks[x] = [x, extractLinks(x), [], [], null, null];
   }
 });
 
-const processText = text => {
+const processText = (text) => {
   if (!text) {
     return "";
   }
@@ -318,7 +319,7 @@ const processText = text => {
     })
     .replace(/\(\((.+?)\)\)/g, (hit, uid) => {
       if (blocks[uid]) {
-        return blocks[uid][0];
+        return blocks[uid][0].trim().slice(2);
       }
       return hit;
     });
@@ -333,11 +334,11 @@ const trimString = (str, maxLength) => {
 };
 
 const renderLinkedReferences = (refs, clean) => {
-  const b = filterBlocks(refs.filter(f => f).map(x => [x, ...blocks[x]])).map(
-    x => x[0]
-  );
+  const b = filterBlocks(
+    refs.filter((f) => f).map((x) => [x, ...blocks[x]])
+  ).map((x) => x[0]);
   return refs
-    .map(f => {
+    .map((f) => {
       const b = blocksWithChildren[f];
       let indent = 2;
       if (b) {
@@ -345,14 +346,14 @@ const renderLinkedReferences = (refs, clean) => {
         if (!clean) {
           text += `# [[${b[0]}]]\n`;
           if (b[1].length > 0) {
-            text += `  - ${b[1].map(x => trimString(x, 50)).join(" > ")}\n`;
+            text += `  - ${b[1].map((x) => trimString(x, 50)).join(" > ")}\n`;
             indent += 2;
           }
         }
         text += `${processText(b[2])
           .trim()
           .split("\n")
-          .map(x => " ".repeat(indent) + x)
+          .map((x) => " ".repeat(indent) + x)
           .join("\n")}\n`;
         return text;
       } else {
@@ -391,19 +392,19 @@ if (action === "--mentionsClean") {
 if (action == "--query") {
   let queryPos = process.argv[4];
   if (queryPos) {
-    queryPos = queryPos.split(",").map(x => x.trim());
+    queryPos = queryPos.split(",").map((x) => x.trim());
   }
   let queryNeg = process.argv[5];
 
   if (queryNeg) {
-    queryNeg = queryNeg.split(",").map(x => x.trim());
+    queryNeg = queryNeg.split(",").map((x) => x.trim());
   }
   const firstMatches = linkedReferences[queryPos[0]];
-  const queryMatches = firstMatches.filter(x => {
-    if (queryPos.some(tag => !blocks[x][1].includes(tag))) {
+  const queryMatches = firstMatches.filter((x) => {
+    if (queryPos.some((tag) => !blocks[x][1].includes(tag))) {
       return false;
     }
-    if (queryNeg && queryNeg.some(tag => blocks[x][1].includes(tag))) {
+    if (queryNeg && queryNeg.some((tag) => blocks[x][1].includes(tag))) {
       return false;
     }
     return true;
@@ -414,19 +415,19 @@ if (action == "--query") {
 if (action == "--tags") {
   const ref = linkedReferences[process.argv[4]];
   let tags = [];
-  ref.forEach(x => (tags = tags.concat(blocks[x][1])));
+  ref.forEach((x) => (tags = tags.concat(blocks[x][1])));
   console.log([...new Set(tags)].sort());
 }
 
 if (action === "--links") {
   console.log("export default [");
-  Object.keys(linkedReferences).forEach(x => console.log("`" + x + "`,"));
+  Object.keys(linkedReferences).forEach((x) => console.log("`" + x + "`,"));
   console.log("]");
 }
 
 if (action === "--blocks") {
   console.log("export default {");
-  Object.keys(blocks).forEach(x => {
+  Object.keys(blocks).forEach((x) => {
     console.log(`"` + x + '": `' + blocks[x][0].replace(/`/g, "'") + "`,");
   });
   console.log("}");
@@ -434,7 +435,7 @@ if (action === "--blocks") {
 
 if (action === "--blockEmbeds") {
   console.log("export default {");
-  Object.keys(blocksWithChildren).forEach(x => {
+  Object.keys(blocksWithChildren).forEach((x) => {
     console.log(
       `"` + x + '": `' + blocksWithChildren[x][2].replace(/`/g, "'") + "`,"
     );
@@ -442,11 +443,11 @@ if (action === "--blockEmbeds") {
   console.log("}");
 }
 
-const replaceUrls = (text, markdown, acceptedUrls) => {
+const replaceUrls = (text, markdown, acceptedUrls, currentPage) => {
   text = text.replace(/[\<\>]/g, "");
   const ls = extractLinks(text);
   ls.sort((x, y) => x.length - y.length);
-  ls.forEach(x => {
+  ls.forEach((x) => {
     let res = null;
     // if (urls[x]) {
     //   if (markdown) {
@@ -455,23 +456,26 @@ const replaceUrls = (text, markdown, acceptedUrls) => {
     //     res = `<a href="${urls[x][0]}>${x}</a>`;
     //   }
     // } else {
-    if (acceptedUrls && !acceptedUrls.includes(x)) {
+    if ((acceptedUrls && !acceptedUrls.includes(x)) || currentPage === x) {
       res = `**${x}**`;
     }
-    // }
+
+    if (acceptedUrls && acceptedUrls.includes(x) && x.includes("[")) {
+      const cleanedUrl = x.replace(/[\[\]]/g, "");
+      text = text.replace(`[[${x}]]`, `[[${cleanedUrl}]]`);
+    }
     if (res) {
-      console.log(x, res);
       text = text.replace(`[[${x}]]`, res);
     }
   });
   return text;
 };
 
-const reformatText = text => {
+const reformatText = (text) => {
   let output = "";
   const lines = text.split("\n");
   const header = 0;
-  const newL = lines.map(x => {
+  const newL = lines.map((x) => {
     const dash = x.indexOf("-");
     const indent = dash / 4;
     const text = x.substr(dash + 1);
@@ -499,9 +503,13 @@ const reformatText = text => {
         }
       }
     }
-    if(header) { output+='\n'}
+    if (header) {
+      output += "\n";
+    }
     output += `${bullet || false ? "- " : ""}${header}${f[1].trim()}\n`;
-    if(header) { output+='\n'}
+    if (header) {
+      output += "\n";
+    }
   });
   return output;
 };
@@ -523,14 +531,14 @@ if (action === "--replaceURLs") {
 }
 
 if (action === "--urls") {
-  Object.keys(urls).forEach(x => {
+  Object.keys(urls).forEach((x) => {
     console.log(`${x}\t${urls[x][0]}`);
   });
 }
 
 if (action === "--urlsJS") {
   console.log("export default {");
-  Object.keys(urls).forEach(u =>
+  Object.keys(urls).forEach((u) =>
     console.log(
       `"${u.replace(/"/g, "")}": "${urls[u][0].replace(/"/g, "%20")}",`
     )
@@ -544,7 +552,7 @@ if (action === "--wordCount") {
   let wMaxId = undefined;
   let lMax = 0;
   let lMaxId = undefined;
-  Object.keys(blocks).forEach(b => {
+  Object.keys(blocks).forEach((b) => {
     const wCur = ((blocks[b][0] || "").match(/\S+/g) || []).length;
     w += wCur;
     const lCur = blocks[b][1].length;
@@ -572,11 +580,11 @@ if (action === "--parseQuery") {
 
 const roamRe = RegExp(/.+\d\d?.+, \d\d\d\d/);
 
-const isRoamDate = string => roamRe.test(string);
+const isRoamDate = (string) => roamRe.test(string);
 
 const RoamDates = {};
 
-const convertRoamDate = string => {
+const convertRoamDate = (string) => {
   if (RoamDates[string]) {
     return RoamDates[string];
   }
@@ -587,7 +595,7 @@ const convertRoamDate = string => {
 
 const evaluators = {
   and: (block, pieces) =>
-    pieces.every(piece => {
+    pieces.every((piece) => {
       if (typeof piece === "string") {
         const res = block[2].concat(block[3]).includes(piece);
         if (res) {
@@ -603,7 +611,7 @@ const evaluators = {
       }
     }),
   not: (block, pieces) =>
-    !pieces.some(piece => {
+    !pieces.some((piece) => {
       if (typeof piece === "string") {
         const res = block[2].concat(block[3]).includes(piece);
         return res;
@@ -616,7 +624,7 @@ const evaluators = {
       }
     }),
   or: (block, pieces) =>
-    pieces.some(piece => {
+    pieces.some((piece) => {
       if (typeof piece === "string") {
         const res = block[2].concat(block[3]).includes(piece);
         return res;
@@ -629,9 +637,11 @@ const evaluators = {
       }
     }),
   between: (block, pieces) => {
-    pieces = pieces.map(x => convertRoamDate(x));
-    const matchingDates = block[2].concat(block[3]).filter(x => isRoamDate(x));
-    return matchingDates.some(x => {
+    pieces = pieces.map((x) => convertRoamDate(x));
+    const matchingDates = block[2]
+      .concat(block[3])
+      .filter((x) => isRoamDate(x));
+    return matchingDates.some((x) => {
       const d = convertRoamDate(x);
       if (d >= pieces[0] && d <= pieces[1]) {
         return true;
@@ -645,8 +655,10 @@ const evaluators = {
   has: (block, pieces) =>
     block[1].includes(pieces[0] === "highlight" ? "^^" : "**"),
   betweenCreate: (block, pieces) => {
-    pieces = pieces.map(x => convertRoamDate(x));
-    const matchingDates = block[2].concat(block[3]).filter(x => isRoamDate(x));
+    pieces = pieces.map((x) => convertRoamDate(x));
+    const matchingDates = block[2]
+      .concat(block[3])
+      .filter((x) => isRoamDate(x));
     const d = block[6];
     if (d >= pieces[0] && d <= pieces[1]) {
       return true;
@@ -655,8 +667,10 @@ const evaluators = {
     }
   },
   betweenUpdate: (block, pieces) => {
-    pieces = pieces.map(x => convertRoamDate(x));
-    const matchingDates = block[2].concat(block[3]).filter(x => isRoamDate(x));
+    pieces = pieces.map((x) => convertRoamDate(x));
+    const matchingDates = block[2]
+      .concat(block[3])
+      .filter((x) => isRoamDate(x));
     const d = block[5];
     console.log(pieces, d);
     if (d >= pieces[0] && d <= pieces[1]) {
@@ -664,30 +678,30 @@ const evaluators = {
     } else {
       return false;
     }
-  }
+  },
 };
 
 if (action === "--runQuery") {
-  const blocksToProcess = Object.keys(blocks).map(x => [x, ...blocks[x]]);
+  const blocksToProcess = Object.keys(blocks).map((x) => [x, ...blocks[x]]);
   const query = parseQuery(process.argv[4]);
-  const results = Object.values(blocksToProcess).filter(block =>
+  const results = Object.values(blocksToProcess).filter((block) =>
     evaluators[Object.keys(query)[0]](block, Object.values(query)[0])
   );
   const finalBlocks = filterBlocks(results);
-  console.log(renderLinkedReferences(finalBlocks.map(x => x[0])));
+  console.log(renderLinkedReferences(finalBlocks.map((x) => x[0])));
 }
 
 if (action === "--runQueryExport") {
-  let blocksToProcess = Object.keys(pages).map(x => [null, x, [x], []]);
+  let blocksToProcess = Object.keys(pages).map((x) => [null, x, [x], []]);
   const queryStr = process.argv[4];
   if (queryStr) {
     const query = parseQuery(queryStr);
-    blocksToProcess = blocksToProcess.filter(block =>
+    blocksToProcess = blocksToProcess.filter((block) =>
       evaluators[Object.keys(query)[0]](block, Object.values(query)[0])
     );
   }
-  const allLinks = blocksToProcess.map(x => x[1]);
-  blocksToProcess.forEach(block => {
+  const allLinks = blocksToProcess.map((x) => x[1]);
+  blocksToProcess.forEach((block) => {
     const fname = block[1].replace(/[ :\/\(\)]/g, "-");
     let text = `---
 title: "${block[1]}"
@@ -712,11 +726,72 @@ title: "${block[1]}"
 }
 
 if (action === "--runQueryBlocksOnly") {
-  const blocksToProcess = Object.keys(blocks).map(x => [x, ...blocks[x]]);
+  const blocksToProcess = Object.keys(blocks).map((x) => [x, ...blocks[x]]);
   const query = parseQuery(process.argv[4]);
-  const results = Object.values(blocksToProcess).filter(block =>
+  const results = Object.values(blocksToProcess).filter((block) =>
     evaluators[Object.keys(query)[0]](block, Object.values(query)[0])
   );
   const finalBlocks = filterBlocks(results);
-  finalBlocks.forEach(x => console.log(x[1]));
+  finalBlocks.forEach((x) => console.log(x[1]));
+}
+
+const normalize = (text) => {
+  const textAry = text.split("\n");
+  let toRemove = 0;
+  const indent = textAry[0].match(/^( +)/g);
+  if (indent) {
+    toRemove = indent[0].length;
+  }
+  return textAry.map((x) => x.substring(toRemove)).join("\n");
+};
+
+if (action === "--gatsby") {
+  const pub = linkedReferences["public"];
+  let gatsbyBlocks = [];
+  if (pub) {
+    pub.forEach((x) => {
+      const b = blocks[x];
+      if (b[3].length === 1) {
+        gatsbyLinks.push(blocks[x][3][0]);
+      } else {
+        gatsbyBlocks.push(blocksWithChildren[x]);
+      }
+    });
+  }
+  const allLinks = gatsbyLinks.filter(
+    (x) => pages[x] && pages[x].trim().length > 0
+  );
+  const toExport = allLinks
+    .map((x) => [x.replace(/\[\]/g, ""), pages[x]])
+    .concat(
+      gatsbyBlocks.map((x) => [
+        x[2]
+          .split("\n")[0]
+          .replace("#public", "")
+          .replace(/[\[\]]/g, "")
+          .trim()
+          .slice(2),
+        normalize(x[2].split("\n").slice(1).join("\n")),
+      ])
+    );
+  toExport.forEach((b) => {
+    const fname = b[0].replace(/[ :\/\(\)]/g, "-").replace(/[\[\]]/g,'')
+    let text = `---
+title: "${b[0]}"
+---
+
+`;
+    text += replaceUrls(processText(b[1] || ""), false, gatsbyLinks, b[0]);
+
+    // text += "\n\nBacklinks\n";
+    // text += linkedReferences[fname]
+    //   ? replaceUrls(
+    //       renderLinkedReferences(linkedReferences[fname]),
+    //       false,
+    //       allLinks
+    //     )
+    //   : "";
+
+    fs.writeFileSync(`export/${fname}.md`, text);
+  });
 }
