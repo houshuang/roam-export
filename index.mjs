@@ -843,7 +843,7 @@ title: "${b[0]}"
     //       allLinks
     //     )
     //   : "";
-    text = text.replace(/\^\^(.+?)\^\^/g, '<span class="highlight">$1</span>');
+    text = text.replace(/\^\^(.+?)\^\^/g, '&#8203;<mark>$1</mark>');
 
     fs.writeFileSync(`export/${fname}.md`, text);
   });
