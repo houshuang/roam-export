@@ -248,7 +248,9 @@ const childrenRecursively = (
         return "";
       }
       const lines = (child.title || child.string).trim().split("\n");
-      let text = `${"  ".repeat(indent * 2)}- ${lines[0]}\n`;
+      let text = `${"  ".repeat(indent * 2)}- ${lines[0]}<span id='${
+        child.uid
+      }'/>\n`;
       if (lines.length > 1) {
         text += "\n";
         lines.slice(1).forEach((l) => {
@@ -494,7 +496,8 @@ if (action === "--blockEmbeds") {
 }
 
 const replaceUrls = (text, markdown, acceptedUrls, currentPage) => {
-  text = text.replace(/[\<\>]/g, "");
+  // text = text.replace(/[\<\>]/g, "");
+  console.log(text);
   const ls = extractLinks(text);
   ls.sort((x, y) => x.length - y.length);
   ls.forEach((x) => {
@@ -826,7 +829,10 @@ if (action === "--gatsby" || action === "--gatsbyFull") {
       ])
     );
   toExport.forEach((b) => {
-    const fname = b[0].replace(/[ :\/\(\)]/g, "-").replace(/[\[\]]/g, "");
+    const fname = b[0]
+      .replace(/[ :\/\(\)]/g, "-")
+      .replace(/[\[\]]/g, "")
+      .replace(/\<(.+?)\>/g, "");
     let text = `---
 title: "${b[0]}"
 ---
