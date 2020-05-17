@@ -830,9 +830,10 @@ if (action === "--gatsby" || action === "--gatsbyFull") {
     );
   toExport.forEach((b) => {
     const fname = b[0]
-      .replace(/[ :\/\(\)]/g, "-")
       .replace(/[\[\]]/g, "")
-      .replace(/\<(.+?)\>/g, "");
+      .replace(/\<(.+?)\>/g, "")
+      .trim()
+      .replace(/[ :\/\(\)]/g, "-");
     let text = `---
 title: "${b[0]}"
 ---
